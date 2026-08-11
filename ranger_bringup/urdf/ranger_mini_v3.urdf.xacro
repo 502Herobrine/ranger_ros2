@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ranger_mini_v3">
+  <xacro:property name="wheel_radius" value="0.09"/>
+  <xacro:property name="wheel_width" value="0.08"/>
+  <xacro:property name="wheel_x" value="0.25"/>
+  <xacro:property name="wheel_y" value="0.19"/>
+  <xacro:property name="base_height" value="0.22"/>
+
+  <material name="ranger_grey">
+    <color rgba="0.32 0.35 0.38 1.0"/>
+  </material>
+  <material name="ranger_yellow">
+    <color rgba="0.95 0.58 0.05 1.0"/>
+  </material>
+  <material name="wheel_black">
+    <color rgba="0.04 0.04 0.04 1.0"/>
+  </material>
+  <material name="metal">
+    <color rgba="0.55 0.57 0.60 1.0"/>
+  </material>
+
+  <link name="base_footprint"/>
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${base_height}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual name="lower_body">
+      <origin xyz="0 0 -0.035" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.58 0.42 0.18"/>
+      </geometry>
+      <material name="ranger_grey"/>
+    </visual>
+    <visual name="upper_body">
+      <origin xyz="-0.015 0 0.095" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.48 0.35 0.09"/>
+      </geometry>
+      <material name="ranger_yellow"/>
+    </visual>
+    <visual name="front_bumper">
+      <origin xyz="0.31 0 -0.065" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.035" length="0.42"/>
+      </geometry>
+      <material name="metal"/>
+    </visual>
+    <visual name="rear_bumper">
+      <origin xyz="-0.31 0 -0.065" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.035" length="0.42"/>
+      </geometry>
+      <material name="metal"/>
+    </visual>
+  </link>
+
+  <xacro:macro name="steered_wheel" params="prefix x y steering_axis wheel_axis">
+    <link name="${prefix}_steering_link">
+      <visual>
+        <origin xyz="0 0 -0.05" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.045" length="0.10"/>
+        </geometry>
+        <material name="metal"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_steering_joint" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_steering_link"/>
+      <origin xyz="${x} ${y} -0.10" rpy="0 0 0"/>
+      <axis xyz="0 0 ${steering_axis}"/>
+      <limit lower="-2.1" upper="2.1" effort="5.0" velocity="6.28"/>
+    </joint>
+
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="wheel_black"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="${prefix}_steering_link"/>
+      <child link="${prefix}_wheel_link"/>
+      <origin xyz="0 0 -0.12" rpy="0 0 0"/>
+      <axis xyz="0 ${wheel_axis} 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:steered_wheel prefix="front_left" x="${wheel_x}" y="${wheel_y}"
+                       steering_axis="1" wheel_axis="1"/>
+  <xacro:steered_wheel prefix="front_right" x="${wheel_x}" y="${-wheel_y}"
+                       steering_axis="-1" wheel_axis="1"/>
+  <xacro:steered_wheel prefix="rear_left" x="${-wheel_x}" y="${wheel_y}"
+                       steering_axis="1" wheel_axis="1"/>
+  <xacro:steered_wheel prefix="rear_right" x="${-wheel_x}" y="${-wheel_y}"
+                       steering_axis="-1" wheel_axis="1"/>
+</robot>
