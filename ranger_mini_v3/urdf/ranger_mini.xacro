@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot name="ranger_mini_v3"  xmlns:xacro="http://ros.org/wiki/xacro">
 
+  <xacro:arg name="use_ros2_control" default="false"/>
+
   <link name="base_footprint"/>
 
   <joint name="base_footprint_joint" type="fixed">
-    <origin xyz="0 0 0.22" rpy="0 0 0"/>
+    <origin xyz="0 0 0.31" rpy="0 0 0"/>
     <parent link="base_footprint"/>
     <child link="base_link"/>
   </joint>
@@ -91,7 +93,7 @@
     <child
       link="fr_steering_wheel_link" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
     <limit effort="5" velocity="6.28"  lower="-2.1" upper="2.1" />
 
   </joint>
@@ -181,7 +183,7 @@
     <child
       link="fl_steering_wheel_link" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
         <limit effort="5" velocity="6.28"  lower="-2.1" upper="2.1" />
 
   </joint>
@@ -270,7 +272,7 @@
     <child
       link="rl_steering_wheel_link" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
         <limit effort="5" velocity="6.28"  lower="-2.1" upper="2.1" />
   </joint>
 
@@ -331,7 +333,7 @@
         <origin xyz="-0.23 -0.206 -0.1" rpy="0 0 0" />
         <parent link="base_link"/>
         <child link="rr_steering_wheel_link"/>
-        <axis xyz="0 0 -1" rpy="0 0 0" />
+        <axis xyz="0 0 1" rpy="0 0 0" />
         <limit effort="5" velocity="6.28"  lower="-2.1" upper="2.1" />
     </joint>
 
@@ -367,98 +369,101 @@
             <axis xyz="0 1 0" rpy="0 0 0" />
         </joint>
 
-<!-- 
-	<transmission name="fl_steering_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
+  <xacro:macro name="wheel_surface" params="link_name">
+    <gazebo reference="${link_name}">
+      <mu1>1.2</mu1>
+      <mu2>1.2</mu2>
+      <kp>1000000.0</kp>
+      <kd>10.0</kd>
+      <minDepth>0.001</minDepth>
+      <maxVel>0.1</maxVel>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:wheel_surface link_name="fl_wheel_link"/>
+  <xacro:wheel_surface link_name="fr_wheel_link"/>
+  <xacro:wheel_surface link_name="rl_wheel_link"/>
+  <xacro:wheel_surface link_name="rr_wheel_link"/>
+
+  <xacro:if value="$(arg use_ros2_control)">
+    <ros2_control name="GazeboSystem" type="system">
+      <hardware>
+        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+      </hardware>
+
       <joint name="fl_steering_joint">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        <command_interface name="position">
+          <param name="min">-2.1</param>
+          <param name="max">2.1</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="fl_steering_wheel_motor">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="fr_steering_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="fr_steering_joint">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        <command_interface name="position">
+          <param name="min">-2.1</param>
+          <param name="max">2.1</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="fr_steering_wheel_motor">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="rl_steering_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="rl_steering_joint">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        <command_interface name="position">
+          <param name="min">-2.1</param>
+          <param name="max">2.1</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="rl_steering_wheel_motor">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="rr_steering_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="rr_steering_joint">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        <command_interface name="position">
+          <param name="min">-2.1</param>
+          <param name="max">2.1</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="rr_steering_wheel_motor">
-		<hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
 
-	<transmission name="fl_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="fl_wheel">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+        <command_interface name="velocity">
+          <param name="min">-25.0</param>
+          <param name="max">25.0</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="fl_wheel_motor">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="fr_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="fr_wheel">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+        <command_interface name="velocity">
+          <param name="min">-25.0</param>
+          <param name="max">25.0</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="fr_wheel_motor">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="rl_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="rl_wheel">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+        <command_interface name="velocity">
+          <param name="min">-25.0</param>
+          <param name="max">25.0</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="rl_wheel_motor">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-
-	<transmission name="rr_wheel_trans">
-      <type>transmission_interface/SimpleTransmission</type>
       <joint name="rr_wheel">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+        <command_interface name="velocity">
+          <param name="min">-25.0</param>
+          <param name="max">25.0</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
       </joint>
-	  <actuator name="rr_wheel_motor">
-		<hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
-		<mechanicalReduction>30</mechanicalReduction>
-      </actuator>
-	</transmission>
-  <gazebo>
-    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
-    </plugin>
-  </gazebo> -->
+    </ros2_control>
+
+    <gazebo>
+      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+        <parameters>$(find ranger_mini_v3)/config/ranger_mini_joint.yaml</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:if>
 
 
 

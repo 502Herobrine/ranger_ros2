@@ -27,7 +27,12 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -58,7 +63,7 @@ def generate_launch_description():
     spawn_yaw = LaunchConfiguration('yaw')
 
     robot_description = ParameterValue(
-        Command(['xacro ', model]),
+        Command(['xacro ', model, ' use_ros2_control:=true']),
         value_type=str,
     )
 
@@ -103,6 +108,44 @@ def generate_launch_description():
         output='screen',
     )
 
+    controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'joint_state_broadcaster',
+            'forward_position_controller',
+            'forward_velocity_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '120',
+            '--switch-timeout', '120',
+        ],
+        output='screen',
+    )
+
+    four_ws_controller = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('four_ws_control'),
+                'launch',
+                'four_ws_control.launch.py',
+            ]),
+        ),
+        launch_arguments={'use_sim_time': 'true'}.items(),
+    )
+
+    start_controllers_after_spawn = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_entity,
+            on_exit=[controller_spawner],
+        )
+    )
+    start_twist_controller_after_controllers = RegisterEventHandler(
+        OnProcessExit(
+            target_action=controller_spawner,
+            on_exit=[four_ws_controller],
+        )
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'model',
@@ -143,7 +186,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'z',
-            default_value='0.0',
+            default_value='0.1',
             description='Initial height of base_footprint in metres.',
         ),
         DeclareLaunchArgument(
@@ -153,5 +196,7 @@ def generate_launch_description():
         ),
         gazebo,
         robot_state_publisher,
+        start_controllers_after_spawn,
+        start_twist_controller_after_controllers,
         spawn_entity,
     ])

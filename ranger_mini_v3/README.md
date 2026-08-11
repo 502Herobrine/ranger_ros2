@@ -6,13 +6,14 @@ from upstream commit `27633a956c845903ee630538afeb17fe70afdd84` of
 `agilexrobotics/ugv_gazebo_sim`.
 
 The ROS 2 port replaces catkin with ament, converts the XML launch files to
-Python launch files, updates the RViz configuration for RViz2, and spawns the
-model in Gazebo Classic through `gazebo_ros/spawn_entity.py`. A massless
-`base_footprint` root link is added for KDL compatibility and ground alignment;
-the official meshes and movable-joint structure are unchanged. The bundled
-joint-name YAML is updated to match the eight joints in the V3 xacro.
+Python launch files, updates the RViz configuration for RViz2, and integrates
+Gazebo Classic with `gazebo_ros2_control`. A massless `base_footprint` root link
+is added for KDL compatibility and ground alignment. The four-wheel-steering
+controller is reused from AgileX Robotics' official `ugv_gazebo_sim` Humble
+branch and adapted to the Mini V3 geometry and joint names.
 
 ```bash
 ros2 launch ranger_mini_v3 display.launch.py
 ros2 launch ranger_mini_v3 gazebo.launch.py
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```

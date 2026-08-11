@@ -3,7 +3,7 @@
 <package format="3">
   <name>ranger_mini_v3</name>
   <version>1.0.0</version>
-  <description>ROS 2 URDF description and visualization package for Ranger Mini V3.</description>
+  <description>ROS 2 description, ros2_control, and Gazebo simulation for Ranger Mini V3.</description>
 
   <maintainer email="support1@agilex.ai">AgileX Robotics</maintainer>
   <license>BSD-3-Clause</license>
@@ -11,9 +11,14 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
+  <exec_depend>four_ws_control</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_ros2_control</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
@@ -26,5 +31,7 @@
   <export>
     <build_type>ament_cmake</build_type>
     <architecture_independent/>
+    <!-- Allow Gazebo clients to resolve model://ranger_mini_v3/... URIs. -->
+    <gazebo_ros gazebo_model_path="${prefix}/.."/>
   </export>
 </package>

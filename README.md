@@ -10,7 +10,8 @@ CAN 配置脚本和实车启动方式。
 - 将 AgileX 官方 ROS 1 `ranger_mini_v3` 描述包迁移到 ROS 2 Humble；
 - 加入官方 URDF/Xacro、Ranger Mini V3 DAE 网格和 RViz2 配置；
 - 增加 RViz2 模型展示 launch；
-- 增加 Gazebo Classic 模型生成 launch；
+- 增加 Gazebo Classic 仿真 launch 和 `gazebo_ros2_control` 接口；
+- 复用官方 `ugv_gazebo_sim` Humble 分支的 `four_ws_control`，适配 V3 后可直接响应 `/cmd_vel`；
 - 增加 `base_footprint`，使 TF 树、KDL 解析和地面对齐更合理；
 - 修正 V3 模型的四个转向关节和四个车轮关节配置。
 
@@ -40,6 +41,7 @@ Ranger Mini V3 的原始模型资源来自 AgileX 官方
 | `ranger_bringup` | 实车启动、CAN 配置脚本和 V3 RViz2 快捷入口 |
 | `ranger_msgs` | Ranger 自定义消息 |
 | `ranger_mini_v3` | 新增的 V3 URDF/Xacro、网格、RViz2 和 Gazebo launch |
+| `four_ws_control` | 从 AgileX 官方 Humble 仿真包迁入并适配 V3 的四轮转向控制节点 |
 
 ## 环境
 
@@ -68,7 +70,11 @@ sudo apt install -y \
   ros-humble-robot-state-publisher \
   ros-humble-rviz2 \
   ros-humble-xacro \
-  ros-humble-gazebo-ros-pkgs
+  ros-humble-gazebo-ros-pkgs \
+  ros-humble-gazebo-ros2-control \
+  ros-humble-ros2-control \
+  ros-humble-ros2-controllers \
+  python3-numpy
 ```
 
 ### 2. 克隆 SDK 和本仓库
@@ -206,11 +212,26 @@ ros2 launch ranger_mini_v3 display.launch.py \
   rviz_config:=/absolute/path/to/config.rviz
 ```
 
-### Gazebo Classic 生成模型
+### Gazebo Classic 运动仿真
+
+启动 Gazebo、生成模型并加载 ros2_control 控制器：
 
 ```bash
 ros2 launch ranger_mini_v3 gazebo.launch.py
 ```
+
+等待终端显示三个控制器均为 `active` 后，在另一个已加载工作区环境的终端中
+启动键盘控制：
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/ranger_ws/install/setup.bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+`teleop_twist_keyboard` 默认向 `/cmd_vel` 发布 `geometry_msgs/msg/Twist`。由 AgileX
+官方 Humble 仿真包迁入的 `four_ws_control` 会在同相转向、反相转向和原地旋转
+三种模式之间自动切换，并分别计算四个转向角和四个车轮角速度。按空格键可停车。
 
 无界面运行：
 
@@ -244,10 +265,16 @@ ros2 launch ranger_mini_v3 gazebo.launch.py \
 | `x`, `y`, `z` | `0.0` | 初始位置，单位为米 |
 | `yaw` | `0.0` | 初始偏航角，单位为弧度 |
 
-> [!NOTE]
-> 当前 Gazebo 部分用于加载官方 V3 几何模型、关节和碰撞属性，尚未集成
-> `ros2_control` 或四轮转向 Gazebo 控制插件。因此模型可以生成并参与物理仿真，
-> 但不能直接通过 `/cmd_vel` 在 Gazebo 中行驶。
+检查 ros2_control 状态：
+
+```bash
+ros2 control list_controllers
+ros2 control list_hardware_interfaces
+```
+
+正常情况下，`joint_state_broadcaster`、`forward_position_controller` 和
+`forward_velocity_controller` 均应显示为 `active`，八个 command interface 均应为
+`[claimed]`。
 
 ## ROS 接口
 
@@ -281,6 +308,8 @@ ros2 launch ranger_mini_v3 gazebo.launch.py \
 - UGV SDK：<https://github.com/agilexrobotics/ugv_sdk>
 - Ranger Mini V3 官方模型：
   <https://github.com/agilexrobotics/ugv_gazebo_sim/tree/master/ranger_mini/ranger_mini_v3>
+- Ranger ROS 2 Humble 仿真与四轮转向控制：
+  <https://github.com/agilexrobotics/ugv_gazebo_sim/tree/humble/ranger>
 
 ## License
 
