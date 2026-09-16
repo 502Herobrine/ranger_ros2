@@ -27,192 +27,128 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""
-Convert cmd_vel to Ranger four-wheel-steering controller commands.
-
-Adapted for Ranger Mini V3 from AgileX Robotics' four_ws_control package in
-ugv_gazebo_sim (humble branch, commit 8bf6a52a3139969d27548622e6144a90c2b80894).
-"""
+"""Convert a body Twist to the four Ranger Mini V3 wheel commands."""
 
 import math
-import threading
 
 from geometry_msgs.msg import Twist
-import numpy as np
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Joy
+from sensor_msgs.msg import JointState, Joy
 from std_msgs.msg import Float64MultiArray
 
 
-vel_msg = Twist()
-msg_vel = Twist()
-mode_selection = 0  # 1: opposite phase, 2: in-phase, 3: pivot turn
+def wheel_targets(vx, vy, wz, wheel_base, wheel_separation, wheel_radius):
+    """Return FL, FR, RL, RR steering angles and signed wheel angular speeds."""
+    angles, speeds = [], []
+    for x, y in ((wheel_base / 2, wheel_separation / 2),
+                 (wheel_base / 2, -wheel_separation / 2),
+                 (-wheel_base / 2, wheel_separation / 2),
+                 (-wheel_base / 2, -wheel_separation / 2)):
+        wx, wy = vx - wz * y, vy + wz * x
+        angle, speed = math.atan2(wy, wx), math.hypot(wx, wy) / wheel_radius
+        if angle > math.pi / 2:
+            angle -= math.pi
+            speed = -speed
+        elif angle < -math.pi / 2:
+            angle += math.pi
+            speed = -speed
+        angles.append(angle)
+        speeds.append(speed)
+    return angles, speeds
 
 
 class Commander(Node):
-    """Publish steering-position and wheel-velocity command arrays."""
+    """Retain upstream topics and wheel ordering; use measured steering feedback."""
 
     def __init__(self):
         super().__init__('commander')
-        self.wheel_separation = self.declare_parameter(
-            'wheel_separation', 0.38).value
+        self.wheel_separation = self.declare_parameter('wheel_separation', 0.38).value
         self.wheel_base = self.declare_parameter('wheel_base', 0.50).value
         self.wheel_radius = self.declare_parameter('wheel_radius', 0.09).value
-        self.wheel_steering_y_offset = self.declare_parameter(
-            'wheel_steering_y_offset', 0.0).value
-        self.steering_track = (
-            self.wheel_separation - 2 * self.wheel_steering_y_offset)
-
-        self.pos = np.zeros(4, dtype=float)
-        self.vel = np.zeros(4, dtype=float)
+        self.timeout = self.declare_parameter('cmd_vel_timeout', 0.5).value
+        if min(self.wheel_separation, self.wheel_base, self.wheel_radius, self.timeout) <= 0:
+            raise ValueError('Wheel geometry and command timeout must be positive')
+        self.target = (0.0, 0.0, 0.0)
+        self.received = None
+        self.angles = [0.0] * 4
+        self.measured = {}
+        self.feedback_received = None
+        self.names = [p + '_steering_joint' for p in
+                      ('front_left', 'front_right', 'rear_left', 'rear_right')]
         self.pub_pos = self.create_publisher(
             Float64MultiArray, '/forward_position_controller/commands', 10)
         self.pub_vel = self.create_publisher(
             Float64MultiArray, '/forward_velocity_controller/commands', 10)
-        self.timer = self.create_timer(0.02, self.timer_callback)
+        self.create_subscription(Twist, 'cmd_vel', self.command, 1)
+        self.create_subscription(Joy, 'joy', self.joy, 10)
+        self.create_subscription(JointState, 'joint_states', self.joints, 10)
+        self.create_timer(0.02, self.update)
 
-    def timer_callback(self):
-        global vel_msg, mode_selection, msg_vel
-        vel_msg = msg_vel
+    def command(self, msg):
+        values = (msg.linear.x, msg.linear.y, msg.angular.z)
+        if all(math.isfinite(v) for v in values):
+            self.target = values
+            self.received = self.get_clock().now()
 
-        if mode_selection == 1:  # opposite phase
-            steering_offset = (
-                vel_msg.angular.z * self.wheel_steering_y_offset)
-            direction = np.sign(vel_msg.linear.x)
-            left_speed = direction * math.hypot(
-                vel_msg.linear.x
-                - vel_msg.angular.z * self.steering_track / 2,
-                vel_msg.angular.z * self.wheel_base / 2,
-            ) - steering_offset
-            right_speed = direction * math.hypot(
-                vel_msg.linear.x
-                + vel_msg.angular.z * self.steering_track / 2,
-                vel_msg.angular.z * self.wheel_base / 2,
-            ) + steering_offset
-            self.vel[:] = [left_speed, right_speed, left_speed, right_speed]
+    def joy(self, msg):
+        if len(msg.buttons) <= 5 or len(msg.axes) <= 3:
+            return
+        command = Twist()
+        if msg.buttons[0]:
+            command.linear.x = msg.axes[1] * 1.5
+            command.linear.y = msg.axes[0] * 1.5
+        elif msg.buttons[4]:
+            command.linear.x = msg.axes[1] * 1.5
+            command.angular.z = msg.axes[3] * 2.0
+        elif msg.buttons[5]:
+            command.angular.z = msg.axes[3] * 2.0
+        self.command(command)
 
-            self.pos[0] = math.atan2(
-                vel_msg.angular.z * self.wheel_base,
-                2 * vel_msg.linear.x
-                + vel_msg.angular.z * self.steering_track,
-            )
-            self.pos[1] = math.atan2(
-                vel_msg.angular.z * self.wheel_base,
-                2 * vel_msg.linear.x
-                - vel_msg.angular.z * self.steering_track,
-            )
-            self.pos[2] = -self.pos[0]
-            self.pos[3] = -self.pos[1]
-
-        elif mode_selection == 2:  # in-phase
-            velocity = math.hypot(vel_msg.linear.x, vel_msg.linear.y)
-            direction = np.sign(vel_msg.linear.x)
-            angle = math.atan2(vel_msg.linear.y, vel_msg.linear.x)
-            if angle > math.pi / 2:
-                angle -= math.pi
-                direction = -direction
-            elif angle < -math.pi / 2:
-                angle += math.pi
-                direction = -direction
-            self.pos[:] = angle
-            self.vel[:] = direction * velocity
-
-        elif mode_selection == 3:  # pivot turn
-            angle = math.atan2(self.wheel_base, self.steering_track)
-            self.pos[:] = [-angle, angle, angle, -angle]
-            pivot_speed = vel_msg.angular.z * math.hypot(
-                self.wheel_base / 2, self.steering_track / 2)
-            self.vel[:] = [
-                -pivot_speed, pivot_speed, -pivot_speed, pivot_speed]
-
+    def joints(self, msg):
+        positions = dict(zip(msg.name, msg.position))
+        # Standalone V3 uses fl/fr/rl/rr; composite robots use the long names.
+        aliases = [p + '_steering_joint' for p in ('fl', 'fr', 'rl', 'rr')]
+        measured = {name: positions.get(name, positions.get(alias, math.nan))
+                    for name, alias in zip(self.names, aliases)}
+        if all(math.isfinite(value) for value in measured.values()):
+            self.measured = measured
+            self.feedback_received = self.get_clock().now()
         else:
-            self.pos[:] = 0.0
-            self.vel[:] = 0.0
+            self.feedback_received = None
 
-        # The official equations produce linear wheel speeds; ros2_control's
-        # velocity interfaces expect angular velocity in radians per second.
-        angular_wheel_velocity = self.vel / self.wheel_radius
-        self.pub_pos.publish(Float64MultiArray(data=self.pos.tolist()))
-        self.pub_vel.publish(
-            Float64MultiArray(data=angular_wheel_velocity.tolist()))
-
-
-class JoySubscriber(Node):
-    """Select an official steering mode and velocity from a joystick."""
-
-    def __init__(self):
-        super().__init__('joy_subscriber')
-        self.subscription = self.create_subscription(
-            Joy, 'joy', self.listener_callback, 10)
-
-    def listener_callback(self, data):
-        global vel_msg, mode_selection
-        if len(data.buttons) > 5:
-            if data.buttons[0] == 1:
-                mode_selection = 2
-            elif data.buttons[4] == 1:
-                mode_selection = 1
-            elif data.buttons[5] == 1:
-                mode_selection = 3
-            else:
-                mode_selection = 0
-
-        if len(data.axes) > 3:
-            vel_msg.linear.x = data.axes[1] * 1.5
-            vel_msg.linear.y = data.axes[0] * 1.5
-            vel_msg.angular.z = data.axes[3] * 2.0
-
-
-class TeleopSubscriber(Node):
-    """Select a steering mode from cmd_vel and store the requested Twist."""
-
-    def __init__(self):
-        super().__init__('teleop_subscriber')
-        self.subscription = self.create_subscription(
-            Twist, 'cmd_vel', self.cmd_callback, 10)
-
-    def cmd_callback(self, msg):
-        global msg_vel, mode_selection
-        has_linear = abs(msg.linear.x) > 1e-6 or abs(msg.linear.y) > 1e-6
-        has_yaw = abs(msg.angular.z) > 1e-6
-
-        if has_yaw and has_linear:
-            mode_selection = 1
-        elif has_yaw:
-            mode_selection = 3
-        elif has_linear:
-            mode_selection = 2
-        else:
-            mode_selection = 0
-
-        msg_vel.linear.x = msg.linear.x
-        msg_vel.linear.y = msg.linear.y
-        msg_vel.angular.z = msg.angular.z
+    def update(self):
+        target = self.target
+        now = self.get_clock().now()
+        if (self.received is None or self.feedback_received is None or
+                not 0 <= (now - self.received).nanoseconds <= self.timeout * 1e9 or
+                not 0 <= (now - self.feedback_received).nanoseconds <= self.timeout * 1e9):
+            target = (0.0, 0.0, 0.0)
+        speeds = [0.0] * 4
+        if any(abs(v) > 1e-6 for v in target):
+            self.angles, speeds = wheel_targets(
+                *target, self.wheel_base, self.wheel_separation, self.wheel_radius)
+            # Turn the wheels before driving; a common scale preserves the
+            # requested curvature while steering catches up after mode changes.
+            errors = [abs(a - self.measured.get(name, a + math.pi))
+                      for name, a in zip(self.names, self.angles)]
+            scale = max(0.0, math.cos(max(errors))) if max(errors) < 0.2 else 0.0
+            speeds = [v * scale for v in speeds]
+        # Stop wheel rotation while retaining steering, rather than scrubbing
+        # all four tires back to zero on every stop/watchdog expiration.
+        self.pub_pos.publish(Float64MultiArray(data=self.angles))
+        self.pub_vel.publish(Float64MultiArray(data=speeds))
 
 
 def main(args=None):
     rclpy.init(args=args)
-    commander = Commander()
-    joy_subscriber = JoySubscriber()
-    teleop_subscriber = TeleopSubscriber()
-
-    executor = rclpy.executors.MultiThreadedExecutor()
-    executor.add_node(commander)
-    executor.add_node(joy_subscriber)
-    executor.add_node(teleop_subscriber)
-    executor_thread = threading.Thread(target=executor.spin, daemon=True)
-    executor_thread.start()
-
+    node = Commander()
     try:
-        executor_thread.join()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        executor.shutdown()
-        commander.destroy_node()
-        joy_subscriber.destroy_node()
-        teleop_subscriber.destroy_node()
+        node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 

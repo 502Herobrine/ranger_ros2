@@ -73,8 +73,7 @@ sudo apt install -y \
   ros-humble-gazebo-ros-pkgs \
   ros-humble-gazebo-ros2-control \
   ros-humble-ros2-control \
-  ros-humble-ros2-controllers \
-  python3-numpy
+  ros-humble-ros2-controllers
 ```
 
 ### 2. 克隆 SDK 和本仓库
@@ -226,12 +225,14 @@ ros2 launch ranger_mini_v3 gazebo.launch.py
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ranger_ws/install/setup.bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p repeat_rate:=10.0
 ```
 
 `teleop_twist_keyboard` 默认向 `/cmd_vel` 发布 `geometry_msgs/msg/Twist`。由 AgileX
-官方 Humble 仿真包迁入的 `four_ws_control` 会在同相转向、反相转向和原地旋转
-三种模式之间自动切换，并分别计算四个转向角和四个车轮角速度。按空格键可停车。
+官方 Humble 仿真包迁入的 `four_ws_control` 使用统一轮心速度公式计算四个转向角
+和车轮角速度，支持纯横移、倒车、原地旋转及复合弧线。转向反馈到位后才放行轮速；
+命令或关节反馈超过 0.5 秒未更新时停车并保留转角，因此键盘设置 10 Hz 重复发布。
+按空格键可停车。详见 [four_ws_control](four_ws_control/README.md)。
 
 无界面运行：
 

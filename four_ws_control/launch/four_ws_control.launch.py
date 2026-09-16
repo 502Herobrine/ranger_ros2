@@ -50,7 +50,6 @@ def generate_launch_description():
                 'wheel_separation': 0.38,
                 'wheel_base': 0.50,
                 'wheel_radius': 0.09,
-                'wheel_steering_y_offset': 0.0,
             }],
             output='screen',
         ),
