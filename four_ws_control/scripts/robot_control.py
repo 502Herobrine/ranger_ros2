@@ -80,9 +80,17 @@ class Commander(Node):
             Float64MultiArray, '/forward_position_controller/commands', 10)
         self.pub_vel = self.create_publisher(
             Float64MultiArray, '/forward_velocity_controller/commands', 10)
+        # Teleoperation is published onto the same command bus as navigation
+        # instead of writing `target` directly. Anything downstream — the
+        # velocity smoother, the collision monitor — then sees the stick like any
+        # other velocity source. A joystick callback that set `target` itself
+        # would drive straight past every one of those layers.
+        self.teleop_topic = self.declare_parameter(
+            'teleop_topic', 'cmd_vel_nav').value
         self.create_subscription(Twist, 'cmd_vel', self.command, 1)
         self.create_subscription(Joy, 'joy', self.joy, 10)
         self.create_subscription(JointState, 'joint_states', self.joints, 10)
+        self.pub_teleop = self.create_publisher(Twist, self.teleop_topic, 1)
         self.create_timer(0.02, self.update)
 
     def command(self, msg):
@@ -103,7 +111,7 @@ class Commander(Node):
             command.angular.z = msg.axes[3] * 2.0
         elif msg.buttons[5]:
             command.angular.z = msg.axes[3] * 2.0
-        self.command(command)
+        self.pub_teleop.publish(command)
 
     def joints(self, msg):
         positions = dict(zip(msg.name, msg.position))

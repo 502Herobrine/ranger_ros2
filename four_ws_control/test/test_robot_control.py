@@ -155,14 +155,40 @@ def test_stop_retains_steering(commander, stop):
 
 @pytest.mark.parametrize('button,expected', [
     (0, (0.75, -0.75, 0.0)), (4, (0.75, 0.0, 0.5)), (5, (0.0, 0.0, 0.5))])
-def test_joystick_modes_and_release(commander, button, expected):
+def test_joystick_modes_publish_onto_the_command_bus(commander, button, expected):
+    """The stick must not bypass whatever sits downstream of the command bus."""
     node, _ = commander
-    buttons = [0] * 6
-    buttons[button] = 1
-    node.joy(Joy(axes=[-0.5, 0.5, 0.0, 0.25], buttons=buttons))
-    assert node.target == expected
-    node.joy(Joy(axes=[-0.5, 0.5, 0.0, 0.25], buttons=[0] * 6))
-    assert node.target == (0.0, 0.0, 0.0)
+    received = []
+    observer = rclpy.create_node('teleop_observer')
+    observer.create_subscription(
+        Twist, node.teleop_topic,
+        lambda msg: received.append((msg.linear.x, msg.linear.y, msg.angular.z)), 10)
+    executor = SingleThreadedExecutor()
+    executor.add_node(observer)
+    try:
+        deadline = time.monotonic() + 5.0
+        while node.pub_teleop.get_subscription_count() == 0:
+            assert time.monotonic() < deadline, 'Teleop subscriber unavailable'
+            executor.spin_once(timeout_sec=0.02)
+        buttons = [0] * 6
+        buttons[button] = 1
+        node.joy(Joy(axes=[-0.5, 0.5, 0.0, 0.25], buttons=buttons))
+        while not received and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=0.02)
+        assert received == [pytest.approx(expected)]
+        # The stick writes the bus, never `target`: writing `target` directly is
+        # exactly the bypass this test exists to prevent.
+        assert node.target == (0.0, 0.0, 0.0)
+        # Releasing publishes an explicit stop rather than silence, so a layer
+        # that latches the last command cannot keep the wheels turning.
+        received.clear()
+        node.joy(Joy(axes=[-0.5, 0.5, 0.0, 0.25], buttons=[0] * 6))
+        while not received and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=0.02)
+        assert received == [pytest.approx((0.0, 0.0, 0.0))]
+    finally:
+        executor.shutdown()
+        observer.destroy_node()
 
 
 @pytest.mark.parametrize('prefixes', [
