@@ -67,6 +67,11 @@ class Commander(Node):
         self.wheel_base = self.declare_parameter('wheel_base', 0.50).value
         self.wheel_radius = self.declare_parameter('wheel_radius', 0.09).value
         self.timeout = self.declare_parameter('cmd_vel_timeout', 0.5).value
+        # Only the collision monitor's output is allowed to reach the wheels, so
+        # every other velocity source (navigation, HMI, joystick) has to pass
+        # through it first. Default keeps the plain command bus so the chassis
+        # still works standalone.
+        self.command_topic = self.declare_parameter('command_topic', 'cmd_vel').value
         if min(self.wheel_separation, self.wheel_base, self.wheel_radius, self.timeout) <= 0:
             raise ValueError('Wheel geometry and command timeout must be positive')
         self.target = (0.0, 0.0, 0.0)
@@ -87,7 +92,8 @@ class Commander(Node):
         # would drive straight past every one of those layers.
         self.teleop_topic = self.declare_parameter(
             'teleop_topic', 'cmd_vel_nav').value
-        self.create_subscription(Twist, 'cmd_vel', self.command, 1)
+        self.command_sub = self.create_subscription(
+            Twist, self.command_topic, self.command, 1)
         self.create_subscription(Joy, 'joy', self.joy, 10)
         self.create_subscription(JointState, 'joint_states', self.joints, 10)
         self.pub_teleop = self.create_publisher(Twist, self.teleop_topic, 1)

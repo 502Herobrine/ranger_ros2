@@ -112,6 +112,49 @@ def lateral_command(node):
     node.command(msg)
 
 
+def test_chassis_listens_only_to_the_braked_topic():
+    """The request bus must not reach the wheels on its own.
+
+    The chassis subscribes to whatever `command_topic` names, and the launch
+    file points that at cmd_vel_safe. A command on cmd_vel has to stay invisible
+    to it, or the collision monitor could be bypassed.
+    """
+    rclpy.init()
+    node = control.Commander()
+    node.destroy_subscription(node.command_sub)
+    node.command_topic = 'cmd_vel_safe'
+    node.command_sub = node.create_subscription(
+        Twist, node.command_topic, node.command, 1)
+    sender = rclpy.create_node('request_bus')
+    observer = rclpy.create_node('request_bus_observer')
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    executor.add_node(sender)
+    executor.add_node(observer)
+    publisher = sender.create_publisher(Twist, 'cmd_vel', 1)
+    delivered = []
+    observer.create_subscription(Twist, 'cmd_vel', delivered.append, 10)
+    try:
+        deadline = time.monotonic() + 5.0
+        while publisher.get_subscription_count() == 0:
+            assert time.monotonic() < deadline, 'Request bus has no observer'
+            executor.spin_once(timeout_sec=0.02)
+        msg = Twist()
+        msg.linear.x = 0.2
+        for _ in range(5):
+            publisher.publish(msg)
+            executor.spin_once(timeout_sec=0.05)
+        assert delivered, 'the command was never published, so the test proves nothing'
+        assert node.target == (0.0, 0.0, 0.0), (
+            'a command on cmd_vel reached the wheels without passing the brake')
+    finally:
+        executor.shutdown()
+        observer.destroy_node()
+        sender.destroy_node()
+        node.destroy_node()
+        rclpy.shutdown()
+
+
 def feedback(node, angles):
     # JointState ordering is independent of the fixed controller array ordering.
     node.joints(JointState(name=node.names[::-1], position=list(angles)[::-1]))

@@ -50,6 +50,8 @@ def generate_launch_description():
                 'wheel_separation': 0.38,
                 'wheel_base': 0.50,
                 'wheel_radius': 0.09,
+                'command_topic': 'cmd_vel_safe',
+                'teleop_topic': 'cmd_vel',
             }],
             output='screen',
         ),
